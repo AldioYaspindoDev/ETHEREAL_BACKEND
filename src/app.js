@@ -35,22 +35,21 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:", "res.cloudinary.com"],
-        connectSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          "http://localhost:3000",
+          "http://localhost:5173",
+          process.env.CLIENT_URL,
+        ],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],
       },
     },
-    hsts: {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true,
-    },
-    frameguard: { action: 'deny' },
+    frameguard: { action: "deny" },
     xssFilter: true,
     noSniff: true,
-    ieNoOpen: true,
   })
 );
 

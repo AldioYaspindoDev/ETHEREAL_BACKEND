@@ -83,7 +83,7 @@ const userAdminController = {
     try {
       const user = await UserAdmin.findOne({
         username: username.toLowerCase().trim(),
-      });
+      }).select("+password");
 
       if (!user) {
         console.log("❌ Admin not found:", username);
