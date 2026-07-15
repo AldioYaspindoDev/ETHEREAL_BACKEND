@@ -19,11 +19,9 @@ const startServer = async () => {
 
     // 2. Sync semua tabel (alter: true aman untuk dev — hanya ALTER jika perlu)
     //    Untuk production, ganti dengan migrasi manual via sequelize-cli
-    const syncOptions = NODE_ENV === 'production'
-      ? {}              // production: tidak auto-sync, pakai migrations
-      : { alter: true }; // development: auto-alter table
-
-    await syncDB(syncOptions);
+    if (NODE_ENV !== 'production') {
+      await syncDB({ alter: true });
+    }
 
     // 3. Start server
     const server = app.listen(PORT, () => {

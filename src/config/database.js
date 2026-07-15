@@ -8,7 +8,7 @@ const connectDB = async () => {
   } catch (error) {
     console.error('❌ Database connection error:', error.message);
     console.error('Detail:', error.original?.message || error.parent?.message || error);
-    process.exit(1);
+    // Do not run process.exit(1) to avoid crashing serverless startup on Vercel
   }
 };
 
