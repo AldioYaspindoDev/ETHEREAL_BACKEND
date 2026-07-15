@@ -1,9 +1,12 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
-// Ensure uploads directory exists
-const uploadDir = "public/uploads";
+// Determine upload directory based on environment (Vercel has read-only filesystem except /tmp)
+const isVercel = process.env.VERCEL || process.env.NOW_BUILDER;
+const uploadDir = isVercel ? path.join(os.tmpdir(), "uploads") : "public/uploads";
+
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
