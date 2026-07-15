@@ -1,10 +1,10 @@
 // controllers/portofolioController.js
 import Portofolio from '../models/portofolioModel.js';
-import fs from 'fs';
-import path from 'path';
+import { uploadImage, deleteImage, replaceImage } from '../services/mediaService.js';
 
 const portofolioController = {
   createPortofolio: async (req, res) => {
+    let uploadResult = null;
     try {
       const { keterangan } = req.body;
 
@@ -16,21 +16,21 @@ const portofolioController = {
         return res.status(400).json({ success: false, message: 'Gambar tidak boleh kosong' });
       }
 
-      const protocol = req.protocol;
-      const host = req.get('host');
-      const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-      const imagePublicId = req.file.filename;
+      const base64Str = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      uploadResult = await uploadImage(base64Str, { folder: "ethereal/portofolio" });
 
       const newPortofolio = await Portofolio.create({
         keterangan: keterangan.trim(),
-        gambar: imageUrl,
-        gambarPublicId: imagePublicId,
+        gambar: uploadResult.url,
+        gambarPublicId: uploadResult.public_id,
       });
 
       return res.status(201).json({ success: true, message: 'Portofolio berhasil ditambahkan', data: newPortofolio });
     } catch (error) {
       console.error('Create Error:', error);
-      if (req.file) fs.unlink(req.file.path, () => {});
+      if (uploadResult && uploadResult.public_id) {
+        await deleteImage(uploadResult.public_id);
+      }
       return res.status(500).json({ success: false, message: error.message || 'Gagal menambahkan portofolio' });
     }
   },
@@ -76,6 +76,7 @@ const portofolioController = {
   },
 
   updatePortofolio: async (req, res) => {
+    let uploadResult = null;
     try {
       const { id } = req.params;
       const { keterangan } = req.body;
@@ -90,22 +91,23 @@ const portofolioController = {
       const updateData = { keterangan: keterangan.trim() };
 
       if (req.file) {
-        // Hapus file lama
-        if (portofolio.gambarPublicId) {
-          const oldFilePath = path.join('public/uploads', portofolio.gambarPublicId);
-          fs.unlink(oldFilePath, (err) => { if (err) console.error('Gagal hapus file lama:', err.message); });
-        }
-        const protocol = req.protocol;
-        const host = req.get('host');
-        updateData.gambar = `${protocol}://${host}/uploads/${req.file.filename}`;
-        updateData.gambarPublicId = req.file.filename;
+        const base64Str = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+        uploadResult = await replaceImage(
+          portofolio.gambarPublicId,
+          base64Str,
+          { folder: "ethereal/portofolio" }
+        );
+        updateData.gambar = uploadResult.url;
+        updateData.gambarPublicId = uploadResult.public_id;
       }
 
       await portofolio.update(updateData);
       return res.json({ success: true, message: 'Portofolio berhasil diupdate', data: portofolio });
     } catch (error) {
       console.error('Update Error:', error);
-      if (req.file) fs.unlink(req.file.path, () => {});
+      if (uploadResult && uploadResult.public_id) {
+        await deleteImage(uploadResult.public_id);
+      }
       return res.status(500).json({ success: false, message: error.message || 'Gagal update portofolio' });
     }
   },
@@ -116,8 +118,7 @@ const portofolioController = {
       if (!portofolio) return res.status(404).json({ success: false, message: 'Portofolio tidak ditemukan' });
 
       if (portofolio.gambarPublicId) {
-        const filePath = path.join('public/uploads', portofolio.gambarPublicId);
-        fs.unlink(filePath, (err) => { if (err) console.error('Gagal hapus file:', err.message); });
+        await deleteImage(portofolio.gambarPublicId);
       }
 
       await portofolio.destroy();

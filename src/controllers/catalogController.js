@@ -4,8 +4,7 @@ import Catalog, {
   VariantImage,
 } from "../models/catalogModel.js";
 import { Op } from "sequelize";
-import fs from "fs";
-import path from "path";
+import { uploadImage, deleteImage, deleteMultipleImages } from "../services/mediaService.js";
 
 // ─── Helper: normalize catalog Sequelize instance → plain JSON ───────────────
 const normalizeCatalog = (catalog) => {
@@ -73,15 +72,16 @@ const catalogController = {
 
       const productImages = [];
       if (req.files?.length > 0) {
-        const protocol = req.protocol;
-        const host = req.get("host");
-        req.files.forEach((file, index) => {
+        for (let i = 0; i < req.files.length; i++) {
+          const file = req.files[i];
+          const base64Str = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+          const uploadResult = await uploadImage(base64Str, { folder: "ethereal/catalogs" });
           productImages.push({
-            url: `${protocol}://${host}/uploads/${file.filename}`,
-            publicId: file.filename,
-            isPrimary: index === 0,
+            url: uploadResult.url,
+            publicId: uploadResult.public_id,
+            isPrimary: i === 0,
           });
-        });
+        }
       }
       if (productImages.length === 0) {
         return res.status(400).json({
@@ -126,8 +126,9 @@ const catalogController = {
       });
     } catch (error) {
       console.error("❌ Create Catalog Error:", error);
-      if (req.files?.length)
-        req.files.forEach((f) => fs.unlink(f.path, () => {}));
+      if (productImages && productImages.length > 0) {
+        await deleteMultipleImages(productImages.map((img) => img.publicId));
+      }
       res.status(500).json({
         success: false,
         message: error.message || "Gagal menambahkan catalog",
@@ -169,17 +170,20 @@ const catalogController = {
         sizes: parsedSizes,
       });
 
+      const uploadedImages = [];
       if (req.files?.length > 0) {
-        const protocol = req.protocol;
-        const host = req.get("host");
-        await VariantImage.bulkCreate(
-          req.files.map((file, index) => ({
+        for (let i = 0; i < req.files.length; i++) {
+          const file = req.files[i];
+          const base64Str = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+          const uploadResult = await uploadImage(base64Str, { folder: "ethereal/catalogs" });
+          uploadedImages.push({
             variantId: variant.id,
-            url: `${protocol}://${host}/uploads/${file.filename}`,
-            publicId: file.filename,
-            isPrimary: index === 0,
-          })),
-        );
+            url: uploadResult.url,
+            publicId: uploadResult.public_id,
+            isPrimary: i === 0,
+          });
+        }
+        await VariantImage.bulkCreate(uploadedImages);
       }
 
       const result = await Catalog.findByPk(id, {
@@ -199,8 +203,9 @@ const catalogController = {
       });
     } catch (error) {
       console.error("❌ Add Variant Error:", error);
-      if (req.files?.length)
-        req.files.forEach((f) => fs.unlink(f.path, () => {}));
+      if (uploadedImages && uploadedImages.length > 0) {
+        await deleteMultipleImages(uploadedImages.map((img) => img.publicId));
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   },
@@ -417,10 +422,7 @@ const catalogController = {
             await VariantImage.destroy({
               where: { variantId: variant.id, publicId },
             });
-            const filePath = path.join("public/uploads", publicId);
-            if (fs.existsSync(filePath)) {
-              fs.unlink(filePath, () => {});
-            }
+            await deleteImage(publicId);
           }
         } catch (e) {
           console.error("Error parsing deletedImages:", e);
@@ -436,12 +438,21 @@ const catalogController = {
             .filter(Boolean);
 
           if (keepPublicIds.length > 0) {
-            await VariantImage.destroy({
+            const toDelete = await VariantImage.findAll({
               where: {
                 variantId: variant.id,
                 publicId: { [Op.notIn]: keepPublicIds },
               },
             });
+            if (toDelete.length > 0) {
+              await deleteMultipleImages(toDelete.map((img) => img.publicId));
+              await VariantImage.destroy({
+                where: {
+                  variantId: variant.id,
+                  publicId: { [Op.notIn]: keepPublicIds },
+                },
+              });
+            }
           }
         } catch (e) {
           console.error("Error parsing existingImages:", e);
@@ -449,18 +460,20 @@ const catalogController = {
       }
 
       // Handle new images upload
+      const uploadedNewImages = [];
       if (req.files?.length) {
-        const protocol = req.protocol;
-        const host = req.get("host");
-        
-        await VariantImage.bulkCreate(
-          req.files.map((file, index) => ({
+        for (let i = 0; i < req.files.length; i++) {
+          const file = req.files[i];
+          const base64Str = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+          const uploadResult = await uploadImage(base64Str, { folder: "ethereal/catalogs" });
+          uploadedNewImages.push({
             variantId: variant.id,
-            url: `${protocol}://${host}/uploads/${file.filename}`,
-            publicId: file.filename,
-            isPrimary: variant.productImages?.length === 0 && index === 0,
-          })),
-        );
+            url: uploadResult.url,
+            publicId: uploadResult.public_id,
+            isPrimary: variant.productImages?.length === 0 && i === 0,
+          });
+        }
+        await VariantImage.bulkCreate(uploadedNewImages);
       }
 
       const result = await Catalog.findByPk(id, {
@@ -480,8 +493,9 @@ const catalogController = {
       });
     } catch (error) {
       console.error("Update Variant Error:", error);
-      if (req.files?.length)
-        req.files.forEach((f) => fs.unlink(f.path, () => {}));
+      if (uploadedNewImages && uploadedNewImages.length > 0) {
+        await deleteMultipleImages(uploadedNewImages.map((img) => img.publicId));
+      }
       res.status(400).json({ success: false, message: error.message });
     }
   },
@@ -516,10 +530,9 @@ const catalogController = {
           .status(404)
           .json({ success: false, message: "Variant tidak ditemukan" });
 
-      // Hapus gambar-gambar variant
-      for (const img of variant.productImages) {
-        if (img.publicId)
-          fs.unlink(path.join("public/uploads", img.publicId), () => {});
+      // Hapus gambar-gambar variant dari Cloudinary
+      if (variant.productImages?.length > 0) {
+        await deleteMultipleImages(variant.productImages.map((img) => img.publicId));
       }
 
       await variant.destroy(); // cascade delete images
@@ -561,12 +574,15 @@ const catalogController = {
           .status(404)
           .json({ success: false, message: "Catalog tidak ditemukan" });
 
-      // Hapus semua gambar dari local storage
+      // Hapus semua gambar dari Cloudinary
+      const cloudPublicIds = [];
       for (const variant of catalog.variants) {
         for (const img of variant.productImages) {
-          if (img.publicId)
-            fs.unlink(path.join("public/uploads", img.publicId), () => {});
+          if (img.publicId) cloudPublicIds.push(img.publicId);
         }
+      }
+      if (cloudPublicIds.length > 0) {
+        await deleteMultipleImages(cloudPublicIds);
       }
 
       await catalog.destroy(); // cascade ke variants & images
