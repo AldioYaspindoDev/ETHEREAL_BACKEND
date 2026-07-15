@@ -11,6 +11,12 @@ const sequelize = new Sequelize({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'etherealkreatif',
   logging: false, // Turned off to improve performance and keep terminal clean
+  dialectOptions: (process.env.DB_HOST && process.env.DB_HOST.includes('tidbcloud.com')) ? {
+    ssl: {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: false
+    }
+  } : {},
   define: {
     underscored: true,
     freezeTableName: false,
