@@ -1,5 +1,6 @@
 
 import { Sequelize } from 'sequelize';
+import mysql2 from 'mysql2'; // Force Vercel to bundle mysql2
 import 'dotenv/config';
 
 const sequelize = new Sequelize({
