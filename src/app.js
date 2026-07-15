@@ -68,6 +68,7 @@ const FRONTEND_URL = (process.env.CLIENT_URL || "http://localhost:3000").trim();
 // Build allowed origins list and normalize them (remove trailing slash if any)
 const allowedOrigins = [
   "http://localhost:3000", // Vite default
+  "https://ethereal.aldioyaspindo.my.id", // Production frontend
   FRONTEND_URL,
 ].map(url => url.replace(/\/$/, ""))
  .filter((origin, index, self) => self.indexOf(origin) === index);
